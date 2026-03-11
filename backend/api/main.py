@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from backend.core.config import settings
 from backend.db.connections import connect_databases, close_databases
 
+from backend.api.routes import documents
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,26 +23,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
 
 @app.get("/")
 async def root():
-    """Root endpoint to verify the API is running."""
-    return {
-        "message": "Welcome to the ManualMind API",
-        "status": "Healthy",
-        "project": settings.PROJECT_NAME
-    }
-
+    return {"message": "Welcome to the ManualMind API"}
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint to verify database connections."""
     from backend.db.connections import db_clients
-
-    # Simple check to see if clients are populated
     status = "ok" if "mongo" in db_clients else "disconnected"
-
-    return {
-        "api_status": "ok",
-        "database_connections": status
-    }
+    return {"api_status": "ok", "database_connections": status}
