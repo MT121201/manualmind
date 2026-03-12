@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from backend.core.config import settings
 from backend.db.connections import connect_databases, close_databases
 
-from backend.api.routes import documents
+from backend.api.routes import documents, query
 
 
 @asynccontextmanager
@@ -24,6 +24,7 @@ app = FastAPI(
 )
 
 app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
+app.include_router(query.router, prefix="/api/v1/query", tags=["query"])
 
 @app.get("/")
 async def root():

@@ -1,20 +1,40 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    # This automatically looks for a .env file in the same directory
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # This configuration tells Pydantic to read from a .env file
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore" # Ignore extra variables not defined in this class
+    )
 
+    PROJECT_NAME: str = "ManualMind API"
+
+    # MongoDB
     MONGO_URI: str
     MONGO_DB_NAME: str
+
+    # Redis
     REDIS_URL: str
+
+    # MinIO
     MINIO_ENDPOINT: str
     MINIO_ACCESS_KEY: str
     MINIO_SECRET_KEY: str
-    MINIO_SECURE: bool = False
     MINIO_BUCKET_NAME: str
+    MINIO_SECURE: bool = False
+
+    # Qdrant
     QDRANT_HOST: str
     QDRANT_PORT: int
-    GOOGLE_API_KEY: str
 
-# Instantiate the settings object
+    # Celery & RabbitMQ
+    CELERY_BROKER_URL: str
+    CELERY_RESULT_BACKEND: str
+
+    # LLM & AI Keys
+    GOOGLE_API_KEY: str
+    OPENAI_API_KEY: str = "your-api-key-here" # Kept for backward compatibility
+
+# Instantiate the settings
 settings = Settings()
