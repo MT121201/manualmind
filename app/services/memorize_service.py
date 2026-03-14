@@ -1,4 +1,4 @@
-# app/services/memorize_chat.py
+# app/services/memorize_service.py
 import json
 from redis.asyncio import Redis
 from app.core.logger import get_logger

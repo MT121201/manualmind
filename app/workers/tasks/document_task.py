@@ -1,42 +1,18 @@
-# app/workers/tasks.py
+# app/workers/task/document_task.py
 import uuid
 import tempfile
-import asyncio
 import fitz  # PyMuPDF
 import os
-from celery import shared_task
+
 from qdrant_client.models import PointStruct
 
-from app.workers.celery_app import celery_app
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.core.embedding import get_embedding, get_sparse_embedding, get_text_chunks
-from celery.signals import worker_process_init, worker_shutdown
 from app.db.connections import db_manager
+from app.workers.celery_app import celery_app, worker_loop
 
 logger = get_logger(__name__)
-
-
-# This global variable will hold the event loop for the worker process
-worker_loop = None
-
-
-@worker_process_init.connect
-def init_worker_connections(**kwargs):
-    global worker_loop
-    # Create and set a persistent event loop for this process
-    worker_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(worker_loop)
-
-    # Run the connection setup
-    worker_loop.run_until_complete(db_manager.connect())
-
-
-@worker_shutdown.connect
-def on_worker_shutdown(**kwargs):
-    if worker_loop:
-        worker_loop.run_until_complete(db_manager.close())
-        worker_loop.close()
 
 
 # --- Task Pipeline ---

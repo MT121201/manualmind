@@ -1,5 +1,4 @@
 # app/api/endpoints/query.py
-import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from redis.asyncio import Redis
@@ -7,9 +6,10 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from app.api.deps import get_redis
 from app.core.security import get_current_user
-from app.services.rag_services.memorize_chat import get_chat_history, save_chat_message
+from app.services.memorize_service import get_chat_history, save_chat_message
 from app.agent.graph import manual_mind_agent
 from app.core.logger import get_logger
+from app.workers.tasks.memory_task import archive_chat_task
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -60,6 +60,14 @@ async def ask_question(
         # 5. Save the new exchange to Redis
         await save_chat_message(redis_client, request.session_id, "user", request.question)
         await save_chat_message(redis_client, request.session_id, "assistant", final_answer)
+
+        # ==========================================
+        # 6. 🧹 TRIGGER THE COLD MEMORY ARCHIVER
+        # ==========================================
+        # We use .delay() to fire off the Celery task in the background.
+        # The user doesn't have to wait for this to finish!
+        if len(recent_history) >= 2:
+            archive_chat_task.delay(request.session_id)
 
         return {
             "session_id": request.session_id,

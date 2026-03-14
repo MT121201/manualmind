@@ -40,5 +40,14 @@ class Settings(BaseSettings):
     # AUTH
     JWT_SECRET: str = "your-jwt-secret-here"
 
+    # 🧠 The smart, slow model for complex LangGraph routing
+    REASONING_MODEL: str = "gemini-2.5-flash"
+
+    # ⚡ The fast, cheap model for background tasks like summarization
+    FAST_MODEL: str = "gemini-2.5-flash-lite"
+
+    # 📚 The embedding model for Qdrant
+    EMBEDDING_MODEL: str = "models/text-embedding-004"
+
 # Instantiate the settings
 settings = Settings()

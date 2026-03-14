@@ -5,14 +5,11 @@ from app.agent.state import AgentState
 from app.agent.tools import AGENT_TOOLS
 from app.agent.prompts.system import AGENT_SYSTEM_PROMPT
 from app.core.config import settings
+from app.core.llm_factory import get_reasoning_llm
 
 # 1. Initialize Gemini
 # We use temperature=0.2 so it remains factual and doesn't get overly creative with technical manuals.
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-lite",
-    google_api_key=settings.GOOGLE_API_KEY,
-    temperature=0.2
-)
+llm = get_reasoning_llm()
 
 # 2. Equip the LLM with our tools
 llm_with_tools = llm.bind_tools(AGENT_TOOLS)

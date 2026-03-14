@@ -8,7 +8,7 @@ from minio import Minio
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.api.deps import get_mongo_db, get_minio
-from app.workers.tasks import process_document_task
+from app.workers.tasks.document_task import process_document_task
 from app.core.logger import get_logger
 from app.core.config import settings
 from app.core.security import get_current_user
