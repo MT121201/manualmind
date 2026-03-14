@@ -1,4 +1,4 @@
-# app/services/llm.py
+# app/services/rag_services.py
 import google.generativeai as genai
 from app.core.config import settings
 from app.core.logger import get_logger

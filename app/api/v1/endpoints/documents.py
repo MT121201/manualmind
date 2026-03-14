@@ -2,18 +2,18 @@
 import uuid
 import asyncio
 from functools import partial
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
 from minio import Minio
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.api.deps import get_mongo_db, get_minio
-from app.core.config import settings
 from app.workers.tasks import process_document_task
 from app.core.logger import get_logger
-
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from app.core.config import settings
 from app.core.security import get_current_user
 from app.db.models.user import UserRole
+from app.db.models.document import DocumentModel
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -21,25 +21,32 @@ logger = get_logger(__name__)
 
 @router.post("/upload")
 async def upload_document(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
-    minio_client: Minio = Depends(get_minio),
-    db: AsyncIOMotorDatabase = Depends(get_mongo_db)
+        file: UploadFile = File(...),
+        current_user: dict = Depends(get_current_user),
+        minio_client: Minio = Depends(get_minio),
+        db: AsyncIOMotorDatabase = Depends(get_mongo_db)
 ):
-    doc_id = str(uuid.uuid4())
-    object_name = f"{doc_id}/{file.filename}"
-    """
-    1. Generates a unique ID.
-    2. Streams the file to MinIO (non-blocking).
-    3. Saves metadata to MongoDB (with Owner ID!).
-    4. Triggers the background Celery task for extraction.
-    """
-    doc_id = str(uuid.uuid4())
-    object_name = f"{doc_id}/{file.filename}"
-
     try:
+        # 1. 🔒 Determine RBAC permissions
+        allowed_roles = [UserRole.ADMIN, UserRole.USER]
+        if current_user["role"] == UserRole.ADMIN:
+            allowed_roles = [UserRole.ADMIN]
 
-        # 1. Non-blocking upload to MinIO
+        # 2. 🛡️ Instantiate the Pydantic Model FIRST
+        # This automatically generates the `id` and `created_at` timestamps!
+        new_doc = DocumentModel(
+            filename=file.filename,
+            s3_path="",  # Temporary placeholder
+            owner_id=current_user["_id"],
+            allowed_roles=allowed_roles
+        )
+
+        # 3. Build the MinIO path using the auto-generated ID
+        doc_id = new_doc.id
+        object_name = f"{doc_id}/{file.filename}"
+        new_doc.s3_path = object_name  # Update the model with the real path
+
+        # 4. Non-blocking upload to MinIO
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None,
@@ -53,26 +60,11 @@ async def upload_document(
             )
         )
 
-        # 🔒 NEW: Determine document permissions based on who uploaded it
-        allowed_roles = [UserRole.ADMIN, UserRole.USER]
-        if current_user["role"] == UserRole.ADMIN:
-            # If an admin uploads it, let's assume it's an admin-only doc for now
-            # (You can change this later to let them select it in the UI)
-            allowed_roles = [UserRole.ADMIN]
+        # 5. Save the VALIDATED model to MongoDB
+        # .model_dump(by_alias=True) ensures 'id' becomes '_id' for Mongo!
+        await db["documents"].insert_one(new_doc.model_dump(by_alias=True))
 
-        # 2. Save initial document status to MongoDB WITH RBAC
-        doc_metadata = {
-            "_id": doc_id,
-            "filename": file.filename,
-            "s3_path": object_name,
-            "status": "pending",
-            "owner_id": current_user["_id"],       # 🔒 NEW!
-            "allowed_roles": allowed_roles,        # 🔒 NEW!
-            "error": None
-        }
-        await db["documents"].insert_one(doc_metadata)
-
-        # 3. Trigger background worker
+        # 6. Trigger background worker
         process_document_task.delay(doc_id, file.filename, object_name)
 
         return {"document_id": doc_id, "message": "Upload successful, processing started."}

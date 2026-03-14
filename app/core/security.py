@@ -1,10 +1,12 @@
 # app/core/security.py
 import jwt
 from datetime import datetime, timedelta, timezone
+
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from passlib.context import CryptContext
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.db.connections import db_clients
+from app.api.deps import get_mongo_db
 from app.core.config import settings
 
 # Password hashing configuration
@@ -26,20 +28,21 @@ def create_access_token(data: dict, expires_delta: timedelta = timedelta(hours=2
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm="HS256")
 
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: AsyncIOMotorDatabase = Depends(get_mongo_db) # Inject DB here
+):
     """Dependency to inject the current logged-in user into any route."""
     token = credentials.credentials
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
         user_id = payload.get("sub")
-        if user_id is None:
+        if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        # Fetch user from MongoDB
-        db = db_clients["mongo"][settings.MONGO_DB_NAME]
+        # Fetch user using the injected 'db'
         user = await db["users"].find_one({"_id": user_id})
-        if user is None:
+        if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
         return user

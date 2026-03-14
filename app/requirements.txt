@@ -20,3 +20,10 @@ passlib[bcrypt]
 pyjwt
 pydantic[email]
 bcrypt==3.1.7
+duckduckgo-search
+langchain==1.2.12
+langgraph==1.1.2
+langchain-core==1.2.19
+langchain-community==0.4.1
+langchain_google_genai==4.2.1
+ddgs==9.11.3
