@@ -1,3 +1,4 @@
+# app/workers/tasks.py
 import uuid
 import tempfile
 import asyncio
@@ -11,28 +12,44 @@ from app.core.config import settings
 from app.core.logger import get_logger
 from app.core.embedding import get_embedding, get_sparse_embedding, get_text_chunks
 from celery.signals import worker_process_init, worker_shutdown
-from app.db.connections import db_manager  # Use the new singleton
+from app.db.connections import db_manager
 
 logger = get_logger(__name__)
 
 
-# --- Worker Lifecycle Signals ---
+# This global variable will hold the event loop for the worker process
+worker_loop = None
+
+
 @worker_process_init.connect
 def init_worker_connections(**kwargs):
-    import asyncio
-    asyncio.run(db_manager.connect())
+    global worker_loop
+    # Create and set a persistent event loop for this process
+    worker_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(worker_loop)
+
+    # Run the connection setup
+    worker_loop.run_until_complete(db_manager.connect())
 
 
 @worker_shutdown.connect
 def on_worker_shutdown(**kwargs):
-    import asyncio
-    asyncio.run(db_manager.close())
+    if worker_loop:
+        worker_loop.run_until_complete(db_manager.close())
+        worker_loop.close()
+
+
+# --- Task Pipeline ---
+@celery_app.task(bind=True, name="process_document_task")
+def process_document_task(self, document_id: str, filename: str, s3_path: str):
+    # Use the persistent loop instead of starting/stopping one
+    return worker_loop.run_until_complete(run_process_document(document_id, filename, s3_path))
 
 
 # --- Task Pipeline ---
 async def run_process_document(document_id: str, filename: str, s3_path: str):
     # Ensure connections are active
-    await db_manager.connect()
+    # await db_manager.connect() #The worker init do that now
 
     # Access via the manager
     db = db_manager.mongo[settings.MONGO_DB_NAME]
@@ -80,8 +97,3 @@ async def run_process_document(document_id: str, filename: str, s3_path: str):
         # CRITICAL: Clean up temp file
         if temp_pdf_path and os.path.exists(temp_pdf_path):
             os.remove(temp_pdf_path)
-
-
-@celery_app.task(bind=True, name="process_document_task")
-def process_document_task(self, document_id: str, filename: str, s3_path: str):
-    return asyncio.run(run_process_document(document_id, filename, s3_path))
