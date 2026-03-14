@@ -1,16 +1,29 @@
-# backend/db/connections.py
+# app/db/connections.py
 from motor.motor_asyncio import AsyncIOMotorClient
 from minio import Minio
-import redis.asyncio as redis
+from redis.asyncio import Redis
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import VectorParams, Distance  # <-- NEW IMPORTS
-from backend.core.config import settings
-from backend.core.logger import get_logger
+from qdrant_client.models import VectorParams, Distance, SparseVectorParams
+from typing import TypedDict, Optional
+
+from app.core.config import settings
+from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
 # Global dictionary to hold our database clients
-db_clients = {}
+class DatabaseClients(TypedDict):
+    mongo: Optional[AsyncIOMotorClient]
+    redis: Optional[Redis]
+    minio: Optional[Minio]
+    qdrant: Optional[AsyncQdrantClient]
+
+db_clients: DatabaseClients = {
+    "mongo": None,
+    "redis": None,
+    "minio": None,
+    "qdrant": None
+}
 
 
 async def connect_databases():
@@ -21,7 +34,7 @@ async def connect_databases():
         await db_clients["mongo"].admin.command('ping')
 
         # 2. Redis
-        db_clients["redis"] = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        db_clients["redis"] = Redis.from_url(settings.REDIS_URL, decode_responses=True)
         await db_clients["redis"].ping()
 
         # 3. MinIO
@@ -43,24 +56,31 @@ async def connect_databases():
         db_clients["qdrant"] = qdrant_client
 
         # --- PRODUCTION AUTOMATION: Qdrant Setup ---
-        collection_name = "manualmind_docs"
+        docs_collection = "manualmind_docs_v2"
 
         # Get all existing collections (Backwards-compatible check)
         existing_collections = await qdrant_client.get_collections()
         collection_names = [col.name for col in existing_collections.collections]
 
         # Check if our collection is in the list
-        if collection_name not in collection_names:
-            logger.info(f"🛠️ Qdrant collection '{collection_name}' not found. Creating it now...")
+        if docs_collection not in collection_names:
+            logger.info(f"🛠️ Creating Hybrid Qdrant collection: {docs_collection}...")
             await qdrant_client.create_collection(
-                collection_name=collection_name,
-                # Gemini embedding-001 outputs 768 dimensions
-                vectors_config=VectorParams(size=768, distance=Distance.COSINE)
+                collection_name=docs_collection,
+                # 1. The Dense Vector (Gemini 1.5 is 768 dims)
+                vectors_config={
+                    "text-dense": VectorParams(size=768, distance=Distance.COSINE)
+                },
+                # 2. The Sparse Vector (BM25 for exact keywords)
+                sparse_vectors_config={
+                    "text-sparse": SparseVectorParams()
+                }
             )
-            logger.info(f"✅ Created Qdrant collection: {collection_name}")
+            logger.info(f"✅ Created Qdrant collection: {docs_collection}")
         else:
-            logger.info(f"⚡ Qdrant collection '{collection_name}' already exists. Ready to go!")
+            logger.info(f"⚡ Qdrant collection '{docs_collection}' already exists. Ready to go!")
 
+        logger.info("🚀 All databases connected successfully.")
     except Exception as e:
         logger.error(f"❌ Error connecting to databases: {e}")
         raise e

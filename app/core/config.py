@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     )
 
     PROJECT_NAME: str = "ManualMind API"
+    PROJECT_VERSION: str = "1.0.0"
 
     # MongoDB
     MONGO_URI: str
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
     # LLM & AI Keys
     GOOGLE_API_KEY: str
     OPENAI_API_KEY: str = "your-api-key-here" # Kept for backward compatibility
+
+    # AUTH
+    JWT_SECRET: str = "your-jwt-secret-here"
 
 # Instantiate the settings
 settings = Settings()

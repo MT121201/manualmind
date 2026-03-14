@@ -1,4 +1,4 @@
-# backend/core/logger.py
+# app/core/logger.py
 import logging
 
 
