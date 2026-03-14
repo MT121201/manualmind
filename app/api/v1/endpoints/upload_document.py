@@ -1,4 +1,4 @@
-# app/api/v1/endpoints/documents.py
+# app/api/v1/endpoints/upload_document.py
 import uuid
 import asyncio
 from functools import partial
@@ -29,8 +29,9 @@ async def upload_document(
     try:
         # 1. 🔒 Determine RBAC permissions
         allowed_roles = [UserRole.ADMIN, UserRole.USER]
-        if current_user["role"] == UserRole.ADMIN:
-            allowed_roles = [UserRole.ADMIN]
+        # TODO: Permission role to RAG
+        # if current_user["role"] == UserRole.ADMIN:
+        #     allowed_roles = [UserRole.ADMIN]
 
         # 2. 🛡️ Instantiate the Pydantic Model FIRST
         # This automatically generates the `id` and `created_at` timestamps!
