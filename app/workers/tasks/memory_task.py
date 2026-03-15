@@ -16,12 +16,12 @@ logger = get_logger(__name__)
 
 @celery_app.task(bind=True, name="archive_chat_task")
 def archive_chat_task(self, session_id: str):
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(run_archive_chat(session_id))
+    return asyncio.run(run_archive_chat(session_id))
 
 
 async def run_archive_chat(session_id: str):
     logger.info(f"🗄️ Starting Cold Memory Archive for session: {session_id}")
+    await db_manager.connect()
     db = db_manager.mongo[settings.MONGO_DB_NAME]
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 
@@ -85,3 +85,5 @@ async def run_archive_chat(session_id: str):
         raise e
     finally:
         await redis_client.close()
+        await db_manager.close()
+        logger.info("🔌 Safely closed database connections for memory task.")

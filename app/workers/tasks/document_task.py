@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.logger import get_logger
 from app.core.embedding import get_embedding, get_sparse_embedding, get_text_chunks
 from app.db.connections import db_manager
-from app.workers.celery_app import celery_app, worker_loop
+from app.workers.celery_app import celery_app
 
 logger = get_logger(__name__)
 
@@ -19,10 +19,12 @@ logger = get_logger(__name__)
 @celery_app.task(bind=True, name="process_document_task")
 def process_document_task(self, document_id: str, filename: str, s3_path: str):
     """Sync wrapper for Celery to run the async pipeline."""
-    return worker_loop.run_until_complete(run_process_document(document_id, filename, s3_path))
+    return asyncio.run(run_process_document(document_id, filename, s3_path))
 
 
 async def run_process_document(document_id: str, filename: str, s3_path: str):
+    await db_manager.connect()
+
     db = db_manager.mongo[settings.MONGO_DB_NAME]
     minio_client = db_manager.minio
     qdrant_client = db_manager.qdrant
@@ -112,3 +114,5 @@ async def run_process_document(document_id: str, filename: str, s3_path: str):
         if temp_pdf_path and os.path.exists(temp_pdf_path):
             os.remove(temp_pdf_path)
             logger.info("🧹 Cleaned up temporary PDF file.")
+        await db_manager.close()
+        logger.info("🔌 Safely closed database connections for this task.")

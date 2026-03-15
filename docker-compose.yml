@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # 1. THE CORE DATABASES
+  # ==========================================
+  redis:
+    image: redis:alpine
+    container_name: manualmind_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:latest
+    container_name: manualmind_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: manualmind_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    container_name: manualmind_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-password123}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  # ==========================================
+  # 2. THE APPLICATION LAYER
+  # ==========================================
+  api:
+    build: .
+    container_name: manualmind_api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    # The Architect Move: We MUST override the localhost URLs to use Docker network names
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MONGO_URI=mongodb://mongodb:27017
+      - QDRANT_URL=http://qdrant:6333
+      - MINIO_ENDPOINT=minio:9000
+    depends_on:
+      - redis
+      - mongodb
+      - qdrant
+      - minio
+    restart: always
+
+  worker:
+    build: .
+    container_name: manualmind_celery_worker
+    # We override the default FastAPI command to run Celery instead!
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MONGO_URI=mongodb://mongodb:27017
+      - QDRANT_URL=http://qdrant:6333
+      - MINIO_ENDPOINT=minio:9000
+    depends_on:
+      - api # Wait for API to boot up first
+      - redis
+    restart: always
+
+# Define persistent storage blocks so data survives container restarts
+volumes:
+  redis_data:
+  mongo_data:
+  qdrant_data:
+  minio_data:

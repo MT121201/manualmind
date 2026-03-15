@@ -131,7 +131,7 @@ async def ask_question(
         # ==========================================
         # 6. 🧹 TRIGGER THE COLD MEMORY ARCHIVER
         # ==========================================
-        if len(recent_history) >= 2:
+        if len(recent_history) >= 2: #TODO: Bring this to setting
             archive_chat_task.delay(request.session_id)
 
         return {

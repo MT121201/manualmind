@@ -5,6 +5,9 @@ from app.core.security import get_password_hash, verify_password, create_access_
 from app.db.models.user import UserModel
 from app.db.schemas.user import UserCreate, UserLogin
 
+from app.core.logger import get_logger
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 @router.post("/register")
@@ -17,6 +20,11 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # Create new user
+    # Add this right before get_password_hash
+    # logger.info(f"🚨 RAW PASSWORD VALUE: '{user_data.password}'")
+    # logger.info(f"🚨 PASSWORD LENGTH: {len(str(user_data.password))} bytes")
+
+    # hashed_password = get_password_hash(user_data.password)
     new_user = UserModel(
         email=user_data.email,
         hashed_password=get_password_hash(user_data.password),
