@@ -1,7 +1,7 @@
 # app/agent/tools/rag_tool.py
 import asyncio
 from langchain_core.tools import tool
-from qdrant_client import models  # 👈 Import all models at once
+from qdrant_client import models
 from app.db.connections import db_manager
 from app.core.embedding import get_embedding, get_sparse_embedding
 from app.core.logger import get_logger
@@ -18,15 +18,17 @@ async def internal_manuals_tool(query: str) -> str:
     logger.info(f"📚 Agent triggered Internal Manual Search for: '{query}'")
 
     try:
-        await db_manager.connect()
+        # Ensure database is connected
+        if not db_manager.qdrant:
+            await db_manager.connect()
+
         qdrant_client = db_manager.qdrant
-        loop = asyncio.get_event_loop()
 
-        # 1. Generate embeddings
-        raw_dense = await loop.run_in_executor(None, get_embedding, query)
-        raw_sparse = await loop.run_in_executor(None, get_sparse_embedding, query)
+        # 1. Generate embeddings using modern asyncio.to_thread
+        raw_dense = await asyncio.to_thread(get_embedding, query)
+        raw_sparse = await asyncio.to_thread(get_sparse_embedding, query)
 
-        # 🛡️ Force strict Python types
+        # Force strict Python types (Defensive Programming)
         if isinstance(raw_dense, list) and len(raw_dense) > 0 and isinstance(raw_dense[0], list):
             raw_dense = raw_dense[0]
 
@@ -34,22 +36,23 @@ async def internal_manuals_tool(query: str) -> str:
         sparse_indices = [int(x) for x in raw_sparse.get("indices", [])]
         sparse_values = [float(x) for x in raw_sparse.get("values", [])]
 
-        # 🛡️ Dynamic Routing
+        # 2. THE ARCHITECT MOVE: Hybrid Search with Reciprocal Rank Fusion (RRF)
+        # Dynamic Routing
         if sparse_indices and sparse_values:
-            # HYBRID SEARCH
+            logger.info("🔍 Executing Hybrid Search (Dense + Sparse with RRF)...")
             search_results = await qdrant_client.query_points(
                 collection_name="manualmind_docs_v2",
                 prefetch=[
-                    models.Prefetch(query=dense_query, using="text-dense", limit=3),
+                    # Prefetch a slightly larger pool for the fusion algorithm to score
+                    models.Prefetch(query=dense_query, using="text-dense", limit=5),
                     models.Prefetch(
                         query=models.SparseVector(indices=sparse_indices, values=sparse_values),
                         using="text-sparse",
-                        limit=3
+                        limit=5
                     )
                 ],
-                # 👇 THE FIX IS HERE: Wrap the Fusion command in a FusionQuery object
                 query=models.FusionQuery(fusion=models.Fusion.RRF),
-                limit=3,
+                limit=4,  # The final amount of chunks passed to the LLM
             )
         else:
             # DENSE ONLY FALLBACK
@@ -58,17 +61,24 @@ async def internal_manuals_tool(query: str) -> str:
                 collection_name="manualmind_docs_v2",
                 query=dense_query,
                 using="text-dense",
-                limit=3,
+                limit=4,
             )
 
-        # Format contexts
-        contexts = [hit.payload.get("text", "") for hit in search_results.points] if search_results else []
+        if not search_results.points:
+            return "I searched the manuals but could not find any relevant information."
 
-        if not contexts:
-            return "No relevant documentation found."
+        # 3. Format contexts with Citations (Filenames)
+        formatted_results = []
+        for i, point in enumerate(search_results.points):
+            text = point.payload.get("text", "")
+            filename = point.payload.get("filename", "Unknown Document")
 
-        return "\n\n---\n\n".join(contexts)
+            # Including the filename helps the LLM cite its sources!
+            formatted_results.append(f"--- Document: {filename} (Result {i + 1}) ---\n{text}")
+
+        logger.info(f"✅ Search completed. Found {len(search_results.points)} highly relevant chunks.")
+        return "\n\n".join(formatted_results)
 
     except Exception as e:
         logger.error(f"❌ Internal search tool failed: {e}", exc_info=True)
-        return "Internal database error."
+        return "Internal database error occurred while searching manuals."

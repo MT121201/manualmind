@@ -66,7 +66,7 @@ async def upload_document(
         await db["documents"].insert_one(new_doc.model_dump(by_alias=True))
 
         # 6. Trigger background worker
-        process_document_task.delay(doc_id, file.filename, object_name)
+        process_document_task.delay(str(doc_id), file.filename, object_name)
 
         return {"document_id": doc_id, "message": "Upload successful, processing started."}
 

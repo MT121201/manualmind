@@ -8,6 +8,9 @@ from app.api.v1.api import api_router
 from app.api.health import router as health_router
 from app.api.root import router as root_router
 
+from dotenv import load_dotenv
+load_dotenv()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

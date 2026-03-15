@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str
+    CACHE_TTL_SECONDS: int = 3600
 
     # MinIO
     MINIO_ENDPOINT: str
@@ -48,6 +49,12 @@ class Settings(BaseSettings):
 
     # 📚 The embedding model for Qdrant
     EMBEDDING_MODEL: str = "models/text-embedding-004"
+
+    # LangSmith Observability
+    LANGCHAIN_TRACING_V2: str = "false"  # Defaults to false so tests don't fail if key is missing
+    LANGCHAIN_ENDPOINT: str = "https://api.smith.langchain.com"
+    LANGCHAIN_API_KEY: str | None = None
+    LANGCHAIN_PROJECT: str = "default-project"
 
 # Instantiate the settings
 settings = Settings()
