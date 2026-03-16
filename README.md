@@ -36,7 +36,7 @@ graph TD
     Worker -->|Metadata| Mongo[(MongoDB)]
     
     subgraph "Hybrid Search Engine"
-        Qdrant --- Dense[Gemini 1.5 Embeddings]
+        Qdrant --- Dense[Gemini Embeddings]
         Qdrant --- Sparse[BM25 Sparse Vectors]
     end
 ```
